@@ -24,11 +24,13 @@ class InferenceWrapper {
   // Runs inference using given `interpreter`
   std::pair<std::string, float> RunInference(const uint8_t *input_data,
                                              int input_size);
+  size_t GetInputSize() { return input_size_; };
 
  private:
   InferenceWrapper() = default;
   std::vector<std::string> labels_;
   std::unique_ptr<tflite::Interpreter> interpreter_;
+  size_t input_size_;
 };
 
 }  // namespace coral

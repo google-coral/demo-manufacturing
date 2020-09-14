@@ -3,6 +3,8 @@
 #include <memory>
 #include <vector>
 
+#include "absl/strings/str_format.h"
+
 #include "camera_streamer.h"
 #include "inference_wrapper.h"
 
@@ -11,17 +13,6 @@ using coral::CameraStreamer;
 
 // GStreamer definitions
 #define LEAKY_Q " queue max-size-buffers=1 leaky=downstream "
-// Pipeline definition. Camera output is 640x480 and model TPU input
-// is 224x224 RGB
-const gchar* kPipeline =
-    "v4l2src device = /dev/video0 !"
-    "video/x-raw,framerate=30/1,width=640,height=480 ! " LEAKY_Q
-    " ! tee name=t"
-    " t. !" LEAKY_Q
-    "! glimagesink"
-    " t. !" LEAKY_Q
-    "! videoscale ! video/x-raw,width=224,height=224 ! videoconvert ! "
-    "video/x-raw,format=RGB ! appsink name=appsink";
 
 // Callback function called from the appsink on new frames
 void interpret_frame(const uint8_t* pixels, int length, void* args) {
@@ -69,6 +60,17 @@ int main(int argc, char* argv[]) {
 
   InferenceWrapper inferencer(model_path, label_path);
   coral::CameraStreamer streamer;
+  size_t input_size = inferencer.GetInputSize();
+  const std::string pipeline = absl::StrFormat(
+    "v4l2src device = /dev/video0 !"
+    "video/x-raw,framerate=30/1,width=640,height=480 ! " LEAKY_Q
+    " ! tee name=t"
+    " t. !" LEAKY_Q
+    "! glimagesink"
+    " t. !" LEAKY_Q
+    "! videoscale ! video/x-raw,width=%zu,height=%zu ! videoconvert ! "
+    "video/x-raw,format=RGB ! appsink name=appsink", input_size, input_size);
+  const gchar* kPipeline = pipeline.c_str();
 
   streamer.RunPipeline(kPipeline, {interpret_frame, &inferencer});
 }

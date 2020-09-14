@@ -59,6 +59,8 @@ InferenceWrapper::InferenceWrapper(const std::string& model_path,
   interpreter_->SetNumThreads(1);
   TFLITE_MINIMAL_CHECK(interpreter_->AllocateTensors() == kTfLiteOk);
 
+  // Gets input size from interpeter, assumes square.
+  input_size_ = interpreter_->input_tensor(0)->dims->data[1];
   labels_ = read_labels(label_path);
 }
 
