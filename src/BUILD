@@ -36,6 +36,8 @@ cc_binary(
     deps = [
         ":camera_streamer",
         ":inference_wrapper",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings:str_format"
     ],
 )
