@@ -5,10 +5,13 @@
 #include <memory>
 #include <string>
 
-#include "tflite/public/edgetpu_c.h"
 #include "tensorflow/lite/builtin_op_data.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
+#include "tflite/public/edgetpu.h"
+
+#define CORAL_ASSERT(x,y) \
+  {if(!(x)){std::cerr <<y<<std::endl;std::terminate();}}
 
 #define TFLITE_MINIMAL_CHECK(x)                              \
   if (!(x)) {                                                \
@@ -37,28 +40,25 @@ std::vector<std::string> read_labels(const std::string& label_path) {
 }
 
 }  // namespace
-
-InferenceWrapper::InferenceWrapper(const std::string& model_path,
-                                   const std::string& label_path) {
-  std::unique_ptr<tflite::FlatBufferModel> model;
-
-  model = tflite::FlatBufferModel::BuildFromFile(model_path.c_str());
+InferenceWrapper::InferenceWrapper(const std::string& model_path, const std::string& label_path) {
+  const auto tpu_context = edgetpu::EdgeTpuManager::GetSingleton()->OpenDevice();
+  const auto model = tflite::FlatBufferModel::BuildFromFile(model_path.c_str());
   TFLITE_MINIMAL_CHECK(model != nullptr);
-
   tflite::ops::builtin::BuiltinOpResolver resolver;
-  tflite::InterpreterBuilder(*model, resolver)(&interpreter_);
-
-  size_t num_devices;
-  std::unique_ptr<edgetpu_device, decltype(&edgetpu_free_devices)> devices(
-      edgetpu_list_devices(&num_devices), &edgetpu_free_devices);
-  TFLITE_MINIMAL_CHECK(num_devices);
-  const auto& device = devices.get()[0];
-  auto* delegate =
-      edgetpu_create_delegate(device.type, device.path, nullptr, 0);
-  interpreter_->ModifyGraphWithDelegate({delegate, edgetpu_free_delegate});
+  resolver.AddCustom(edgetpu::kCustomOp,edgetpu::RegisterCustomOp());
+  tflite::InterpreterBuilder builder(model->GetModel(),resolver);
+  CORAL_ASSERT(builder(&interpreter_)==kTfLiteOk,"Builder Failed"); 
+  interpreter_->SetExternalContext(kTfLiteEdgeTpuContext,tpu_context.get());
   interpreter_->SetNumThreads(1);
-  TFLITE_MINIMAL_CHECK(interpreter_->AllocateTensors() == kTfLiteOk);
-
+  CORAL_ASSERT(interpreter_->AllocateTensors() == kTfLiteOk,"AllocateTensors failed");
+  // sets output tensor shape.
+  const auto& out_tensor_indices = interpreter_->outputs();
+  output_shape_.resize(out_tensor_indices.size());
+  for (size_t i = 0; i < out_tensor_indices.size(); ++i) {
+    const auto* tensor = interpreter_->tensor(out_tensor_indices[i]);
+    // For detection the output tensors are only of type float.
+    output_shape_[i] = tensor->bytes / sizeof(float);
+  }
   // Gets input size from interpeter, assumes square.
   input_size_ = interpreter_->input_tensor(0)->dims->data[1];
   labels_ = read_labels(label_path);
@@ -66,37 +66,40 @@ InferenceWrapper::InferenceWrapper(const std::string& model_path,
 
 std::pair<std::string, float> InferenceWrapper::RunInference(
       const uint8_t *input_data, int input_size) {
-  std::vector<float> output_data;
+  std::vector<std::vector<float>> output_data;
   uint8_t* input = interpreter_->typed_input_tensor<uint8_t>(0);
   std::memcpy(input, input_data, input_size);
-
+  
   TFLITE_MINIMAL_CHECK(interpreter_->Invoke() == kTfLiteOk);
 
   const auto& output_indices = interpreter_->outputs();
   const auto* out_tensor = interpreter_->tensor(output_indices[0]);
   TFLITE_MINIMAL_CHECK(out_tensor != nullptr);
 
-  float max_prob;
-  int max_index;
-  if (out_tensor->type == kTfLiteUInt8) {
-    const uint8_t* output = interpreter_->typed_output_tensor<uint8_t>(0);
-
-    max_index = std::max_element(output, output + out_tensor->bytes) - output;
-    max_prob = (output[max_index] - out_tensor->params.zero_point) *
-                               out_tensor->params.scale;
-  } else if (out_tensor->type == kTfLiteFloat32) {
-    const float* output = interpreter_->typed_output_tensor<float>(0);
-    max_index = std::max_element(output, output +
-                                 out_tensor->bytes/sizeof(float)) - output;
-    max_prob = output[max_index];
-  } else {
-    std::cerr << "Tensor " << out_tensor->name
-              << " has unsupported output type: " << out_tensor->type
-              << std::endl;
-    exit(EXIT_FAILURE);
+  const size_t num_outputs = output_indices.size();
+  output_data.resize(num_outputs);
+  for (size_t i = 0; i < num_outputs; ++i) {
+    const auto* out_tensor = interpreter_->tensor(output_indices[i]);
+    CORAL_ASSERT(out_tensor != nullptr,"null out_tensor");
+    if (out_tensor->type == kTfLiteFloat32) {
+      const size_t num_values = out_tensor->bytes / sizeof(float);
+      const float* output = interpreter_->typed_output_tensor<float>(i);
+      const size_t size_of_output_tensor_i = output_shape_[i];
+      output_data[i].resize(size_of_output_tensor_i);
+      for (size_t j = 0; j < size_of_output_tensor_i; ++j) {
+        output_data[i][j] = output[j];
+      }
+    } else {
+      std::cerr << "Unsupported output type: " << out_tensor->type
+                << "\n Tensor Name: " << out_tensor->name;
+    }
   }
+  
+  float max_prob=1.5; //TODO(riceg) return detection results instead of these fake classify results
+  int max_index=0; //TODO(riceg) return detection results instead of these fake classify results
 
-  return {labels_[max_index], max_prob};
+
+  return {labels_[max_index], max_prob}; //TODO(riceg) return detection results instead of these fake classify results
 }
 
 }  // namespace coral

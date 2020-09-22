@@ -29,6 +29,8 @@ class InferenceWrapper {
  private:
   InferenceWrapper() = default;
   std::vector<std::string> labels_;
+  std::vector<size_t> input_shape_;
+  std::vector<size_t> output_shape_;
   std::unique_ptr<tflite::Interpreter> interpreter_;
   size_t input_size_;
 };
