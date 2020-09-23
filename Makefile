@@ -34,7 +34,6 @@ endif
 BAZEL_OUT_DIR :=  $(MAKEFILE_DIR)/bazel-out/$(CPU)-$(COMPILATION_MODE)/bin
 BAZEL_BUILD_FLAGS := --crosstool_top=@crosstool//:toolchains \
                      --compiler=gcc \
-                     --copt=-ffp-contract=off \
                      --compilation_mode=$(COMPILATION_MODE) \
                      --copt=-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION \
                      --copt=-std=c++14 \
@@ -44,6 +43,10 @@ BAZEL_BUILD_FLAGS := --crosstool_top=@crosstool//:toolchains \
 
 ifeq ($(COMPILATION_MODE), opt)
 BAZEL_BUILD_FLAGS += --linkopt=-Wl,--strip-all
+else ifeq ($(COMPILATION_MODE), dbg)
+# for now, disable arm_neon in dbg.
+# see: https://github.com/tensorflow/tensorflow/issues/33360
+BAZEL_BUILD_FLAGS += --cxxopt -DTF_LITE_DISABLE_X86_NEON
 endif
 
 ifeq ($(CPU),k8)
