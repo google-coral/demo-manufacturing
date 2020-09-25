@@ -1,15 +1,15 @@
 #include <sys/stat.h>
+
 #include <iostream>
 #include <memory>
 #include <vector>
 
 #include "absl/strings/str_format.h"
-
 #include "camera_streamer.h"
 #include "inference_wrapper.h"
 
-using coral::InferenceWrapper;
 using coral::CameraStreamer;
+using coral::InferenceWrapper;
 
 // GStreamer definitions
 #define LEAKY_Q " queue max-size-buffers=1 leaky=downstream "
@@ -18,13 +18,11 @@ using coral::CameraStreamer;
 void interpret_frame(const uint8_t* pixels, int length, void* args) {
   InferenceWrapper* inferencer = reinterpret_cast<InferenceWrapper*>(args);
 
-  std::pair<std::string, float> results =
-      inferencer->RunInference(pixels, length);
-  std::cout << "Result: " << results.first << " " << results.second
-      << std::endl;
+  inferencer->RunInference(pixels, length);
+
 }
 
-void check_file(const char *file) {
+void check_file(const char* file) {
   struct stat buf;
   if (stat(file, &buf) != 0) {
     std::cerr << file << " does not exist" << std::endl;
@@ -32,9 +30,9 @@ void check_file(const char *file) {
   }
 }
 
-void usage(char *argv[]) {
+void usage(char* argv[]) {
   std::cerr << "Usage: " << argv[0] << " --model model_file --labels label_file"
-      << std::endl;
+            << std::endl;
   exit(EXIT_FAILURE);
 }
 
@@ -45,7 +43,7 @@ int main(int argc, char* argv[]) {
   if (argc == 5) {
     for (int i = 1; i < argc; ++i) {
       if (std::string(argv[i]) == "--model")
-        model_path =  argv[++i];
+        model_path = argv[++i];
       else if (std::string(argv[i]) == "--labels")
         label_path = argv[++i];
       else
@@ -62,14 +60,15 @@ int main(int argc, char* argv[]) {
   coral::CameraStreamer streamer;
   size_t input_size = inferencer.GetInputSize();
   const std::string pipeline = absl::StrFormat(
-    "v4l2src device = /dev/video0 !"
-    "video/x-raw,framerate=30/1,width=640,height=480 ! " LEAKY_Q
-    " ! tee name=t"
-    " t. !" LEAKY_Q
-    "! glimagesink"
-    " t. !" LEAKY_Q
-    "! videoscale ! video/x-raw,width=%zu,height=%zu ! videoconvert ! "
-    "video/x-raw,format=RGB ! appsink name=appsink", input_size, input_size);
+      "v4l2src device = /dev/video0 !"
+      "video/x-raw,framerate=30/1,width=640,height=480 ! " LEAKY_Q
+      " ! tee name=t"
+      " t. !" LEAKY_Q
+      "! glimagesink"
+      " t. !" LEAKY_Q
+      "! videoscale ! video/x-raw,width=%zu,height=%zu ! videoconvert ! "
+      "video/x-raw,format=RGB ! appsink name=appsink",
+      input_size, input_size);
   const gchar* kPipeline = pipeline.c_str();
 
   streamer.RunPipeline(kPipeline, {interpret_frame, &inferencer});
