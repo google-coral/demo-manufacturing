@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "glog/logging.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/model.h"
 #include "tflite/public/edgetpu.h"

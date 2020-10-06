@@ -8,6 +8,7 @@
 #include "absl/flags/parse.h"
 #include "absl/strings/str_format.h"
 #include "camera_streamer.h"
+#include "glog/logging.h"
 #include "inference_wrapper.h"
 
 using coral::CameraStreamer;
@@ -26,13 +27,12 @@ void interpret_frame(const uint8_t* pixels, int length, void* args) {
   InferenceWrapper* inferencer = reinterpret_cast<InferenceWrapper*>(args);
 
   inferencer->RunInference(pixels, length);
-
 }
 
 void check_file(const char* file) {
   struct stat buf;
   if (stat(file, &buf) != 0) {
-    std::cerr << file << " does not exist" << std::endl;
+    LOG(ERROR) << file << " does not exist";
     exit(EXIT_FAILURE);
   }
 }
@@ -52,15 +52,15 @@ int main(int argc, char* argv[]) {
   coral::CameraStreamer streamer;
   size_t input_size = inferencer.GetInputSize();
   const std::string pipeline = absl::StrFormat(
-    "v4l2src device = /dev/video0 !"
-    "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q
-    " ! tee name=t"
-    " t. !" LEAKY_Q
-    "! glimagesink"
-    " t. !" LEAKY_Q
-    "! videoscale ! video/x-raw,width=%d,height=%d ! videoconvert ! "
-    "video/x-raw,format=RGB ! appsink name=appsink", width, height,
-    input_size, input_size);
+      "v4l2src device = /dev/video0 !"
+      "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q
+      " ! tee name=t"
+      " t. !" LEAKY_Q
+      "! glimagesink"
+      " t. !" LEAKY_Q
+      "! videoscale ! video/x-raw,width=%d,height=%d ! videoconvert ! "
+      "video/x-raw,format=RGB ! appsink name=appsink",
+      width, height, input_size, input_size);
   const gchar* kPipeline = pipeline.c_str();
 
   streamer.RunPipeline(kPipeline, {interpret_frame, &inferencer});

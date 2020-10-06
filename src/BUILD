@@ -13,6 +13,7 @@ cc_library(
     srcs = ["camera_streamer.cc"],
     hdrs = ["camera_streamer.h"],
     deps = [
+            "@glog",
             "@system_libs//:gstreamer",
             "@system_libs//:gstallocators",
     ],
@@ -24,6 +25,7 @@ cc_library(
     hdrs = ["inference_wrapper.h"],
     deps = [
         ":edgetpu",
+        "@glog",
         "@org_tensorflow//tensorflow/lite:builtin_op_data",
         "@org_tensorflow//tensorflow/lite:framework",
         "@org_tensorflow//tensorflow/lite/kernels:builtin_ops",
@@ -36,6 +38,7 @@ cc_binary(
     deps = [
         ":camera_streamer",
         ":inference_wrapper",
+        "@glog",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/strings:str_format"
