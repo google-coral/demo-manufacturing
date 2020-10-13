@@ -16,7 +16,11 @@ class CameraStreamer {
   CameraStreamer &operator=(const CameraStreamer &) = delete;
 
   struct UserData {
-    std::function<void(uint8_t *pixels, int length, void *args)> f;
+    std::function<void(uint8_t *pixels, int length, GstElement *rsvg,
+                       void *args)>
+        f;
+    GstElement *rsvg;  // handle to gsstreamer rsvgoverlay module, used by
+                       // interpret_frame()
     void *args;
   };
 

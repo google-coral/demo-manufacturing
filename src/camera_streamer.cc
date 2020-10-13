@@ -17,7 +17,7 @@ GstFlowReturn OnNewSample(GstElement *sink, void *data) {
     if (gst_buffer_map(buf, &info, GST_MAP_READ) == TRUE) {
       // Pass the frame to the user callback
       auto user_data = reinterpret_cast<CameraStreamer::UserData *>(data);
-      user_data->f(info.data, info.size, user_data->args);
+      user_data->f(info.data, info.size, user_data->rsvg, user_data->args);
     } else {
       LOG(ERROR) << "Couldn't get buffer info";
       retval = GST_FLOW_ERROR;
@@ -64,13 +64,15 @@ gboolean OnBusMessage(GstBus *bus, GstMessage *msg, gpointer data) {
 void CameraStreamer::RunPipeline(const gchar *pipeline_string,
                                  UserData user_data) {
   gst_init(nullptr, nullptr);
-
   // Set up a pipeline based on the pipeline string
   auto loop = g_main_loop_new(nullptr, FALSE);
   CHECK_NOTNULL(loop);
   auto pipeline = gst_parse_launch(pipeline_string, nullptr);
   CHECK_NOTNULL(pipeline);
-
+  GstElement *rsvg = gst_bin_get_by_name(GST_BIN(pipeline), "rsvg");
+  CHECK_NOTNULL(rsvg);
+  // Save handle to rsvgoverlay module for use in the callback interpret_frame()
+  user_data.rsvg = rsvg;
   // Add a bus watcher. It's safe to unref the bus immediately after
   auto bus = gst_element_get_bus(pipeline);
   CHECK_NOTNULL(bus);
