@@ -22,9 +22,9 @@ using coral::Point;
 using coral::Polygon;
 
 ABSL_FLAG(std::string, model,
-          "mobilenet_ssd_v1_coco_quant_postprocess_edgetpu.tflite",
+          "models/ssd_mobilenet_v1_coco_quant_postprocess_edgetpu.tflite",
           "Path to tflite model.");
-ABSL_FLAG(std::string, labels, "coco_labels.txt", "Path to labels file.");
+ABSL_FLAG(std::string, labels, "models/coco_labels.txt", "Path to labels file.");
 ABSL_FLAG(uint16_t, width, 640, "Input width.");
 ABSL_FLAG(uint16_t, height, 480, "Input height.");
 ABSL_FLAG(float, threshold, 0.5,
