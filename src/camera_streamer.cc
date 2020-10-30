@@ -17,7 +17,9 @@ GstFlowReturn OnNewSample(GstElement *sink, void *data) {
     if (gst_buffer_map(buf, &info, GST_MAP_READ) == TRUE) {
       // Pass the frame to the user callback
       auto user_data = reinterpret_cast<CameraStreamer::UserData *>(data);
-      user_data->f(info.data, info.size, user_data->rsvg, user_data->args);
+      user_data->f(info.data, info.size, user_data->rsvg, user_data->args,
+                   user_data->width, user_data->height, user_data->threshold,
+                   user_data->keepout_polygon);
     } else {
       LOG(ERROR) << "Couldn't get buffer info";
       retval = GST_FLOW_ERROR;
@@ -33,10 +35,11 @@ gboolean OnBusMessage(GstBus *bus, GstMessage *msg, gpointer data) {
   GMainLoop *loop = reinterpret_cast<GMainLoop *>(data);
 
   switch (GST_MESSAGE_TYPE(msg)) {
-    case GST_MESSAGE_EOS:
+    case GST_MESSAGE_EOS: {
       LOG(INFO) << "End of stream";
       g_main_loop_quit(loop);
       break;
+    }
     case GST_MESSAGE_ERROR: {
       GError *error;
       gst_message_parse_error(msg, &error, nullptr);
@@ -59,7 +62,7 @@ gboolean OnBusMessage(GstBus *bus, GstMessage *msg, gpointer data) {
   return TRUE;
 }
 
-}  //  namespace
+} // namespace
 
 void CameraStreamer::RunPipeline(const gchar *pipeline_string,
                                  UserData user_data) {
@@ -98,4 +101,4 @@ void CameraStreamer::RunPipeline(const gchar *pipeline_string,
   gst_object_unref(pipeline);
 }
 
-}  // namespace coral
+} // namespace coral

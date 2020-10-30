@@ -13,6 +13,7 @@ cc_library(
     srcs = ["camera_streamer.cc"],
     hdrs = ["camera_streamer.h"],
     deps = [
+	    ":keepout_shape",
             "@glog",
             "@system_libs//:gstreamer",
             "@system_libs//:gstallocators",
@@ -32,12 +33,19 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "keepout_shape",
+    srcs = ["keepout_shape.cc"],
+    hdrs = ["keepout_shape.h"],
+)
+
 cc_binary(
     name = "manufacturing_demo",
     srcs = ["manufacturing_demo.cc"],
     deps = [
         ":camera_streamer",
         ":inference_wrapper",
+	":keepout_shape",
         "@glog",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:parse",
