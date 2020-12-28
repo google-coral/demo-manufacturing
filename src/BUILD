@@ -1,14 +1,4 @@
 cc_library(
-    name = "edgetpu",
-    deps = [
-      "@libedgetpu//driver/beagle:beagle_all_driver_provider",
-      "@libedgetpu//tflite/public:edgetpu",
-      "@libedgetpu//tflite/public:edgetpu_c",
-      "@libedgetpu//tflite:custom_op_direct",
-    ],
-)
-
-cc_library(
     name = "camera_streamer",
     srcs = ["camera_streamer.cc"],
     hdrs = ["camera_streamer.h"],
@@ -25,7 +15,7 @@ cc_library(
     srcs = ["inference_wrapper.cc"],
     hdrs = ["inference_wrapper.h"],
     deps = [
-        ":edgetpu",
+        "@libedgetpu//tflite/public:oss_edgetpu_direct_all",
         "@glog",
         "@org_tensorflow//tensorflow/lite:builtin_op_data",
         "@org_tensorflow//tensorflow/lite:framework",
