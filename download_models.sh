@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly TEST_DATA_URL=https://github.com/google-coral/edgetpu/raw/master/test_data
+readonly TEST_DATA_URL=https://github.com/google-coral/test_data/raw/master
 
 # Get TF Lite model and labels
 MODEL_DIR="${SCRIPT_DIR}/models"
@@ -22,4 +22,5 @@ mkdir -p "${MODEL_DIR}"
 (cd "${MODEL_DIR}"
 curl -OL "${TEST_DATA_URL}/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite" \
      -OL "${TEST_DATA_URL}/ssd_mobilenet_v1_coco_quant_postprocess_edgetpu.tflite" \
+     -OL "${TEST_DATA_URL}/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite" \
      -OL "${TEST_DATA_URL}/coco_labels.txt")

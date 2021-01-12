@@ -1,4 +1,7 @@
 /bazel-*
 /out
-*swp
 /models
+
+** Editors **
+*.swp
+*.idea

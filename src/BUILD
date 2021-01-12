@@ -4,6 +4,7 @@ cc_library(
     hdrs = ["camera_streamer.h"],
     deps = [
 	    ":keepout_shape",
+	    ":inference_wrapper",
             "@glog",
             "@system_libs//:gstreamer",
             "@system_libs//:gstallocators",
@@ -27,6 +28,10 @@ cc_library(
     name = "keepout_shape",
     srcs = ["keepout_shape.cc"],
     hdrs = ["keepout_shape.h"],
+    deps = [
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/strings:str_format"
+		    ],
 )
 
 cc_binary(
