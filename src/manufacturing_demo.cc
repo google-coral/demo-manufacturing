@@ -1,7 +1,6 @@
 #include <sys/stat.h>
 
 #include <cmath>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -26,7 +25,7 @@ ABSL_FLAG(
     std::string, model, "models/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite",
     "Path to tflite model.");
 ABSL_FLAG(std::string, labels, "models/coco_labels.txt", "Path to labels file.");
-ABSL_FLAG(std::string, input_path, "", "Path to video source or file to run inference.");
+ABSL_FLAG(std::string, input_path, "/dev/video0", "Path to video source or file to run inference.");
 ABSL_FLAG(uint16_t, width, 640, "Input width.");
 ABSL_FLAG(uint16_t, height, 480, "Input height.");
 ABSL_FLAG(float, threshold, 0.5, "Minimum detection probability required to show bounding box.");
@@ -48,6 +47,14 @@ constexpr char* kSvgText = "<text x=\"$0\" y=\"$1\" font-size=\"large\" fill=\"$
 // GStreamer definitions
 #define LEAKY_Q " queue max-size-buffers=1 leaky=downstream "
 
+void check_file(const char* file) {
+  struct stat buf;
+  if (stat(file, &buf) != 0) {
+    LOG(ERROR) << file << " does not exist";
+    exit(EXIT_FAILURE);
+  }
+}
+
 // Callback function called from the appsink on new frames
 void interpret_frame(
     const uint8_t* pixels, int pixel_length, GstElement* rsvg, InferenceWrapper& inferencer,
@@ -61,9 +68,9 @@ void interpret_frame(
 
   std::string svg;
   for (const auto& result : results) {
-    VLOG(3) << " - Candidate: " << result.candidate << " score: " << result.score
-            << " x1: " << result.x1 * width << " y1: " << result.y1 * height
-            << " x2: " << result.x2 * width << " y2: " << result.y2 * height << "\n";
+    VLOG(3) << " - score: " << result.score << " x1: " << result.x1 * width
+            << " y1: " << result.y1 * height << " x2: " << result.x2 * width
+            << " y2: " << result.y2 * height << "\n";
     std::string box_str;
     std::string label_str;
     int w, h;
@@ -124,27 +131,34 @@ int main(int argc, char* argv[]) {
   const uint16_t height = absl::GetFlag(FLAGS_height);
   const float threshold = absl::GetFlag(FLAGS_threshold);
 
-  if (!std::filesystem::exists(model_path.c_str())
-      || !std::filesystem::exists(label_path.c_str())) {
-    LOG(ERROR) << "Model or Label file does not exist!";
-    exit(EXIT_FAILURE);
-  }
+  check_file(model_path.c_str());
+  check_file(label_path.c_str());
 
   InferenceWrapper inferencer(model_path, label_path);
   coral::CameraStreamer streamer;
   size_t input_size = inferencer.GetInputSize();
+  const auto input_path = absl::GetFlag(FLAGS_input_path);
 
-  const std::string pipeline = absl::StrFormat(
-      "v4l2src device=/dev/video0 !"
-      "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q
-      " ! tee name=t"
-      " t. !" LEAKY_Q
-      "! videoconvert ! rsvgoverlay name=rsvg ! videoconvert ! "
-      "glimagesink "
-      " t. !" LEAKY_Q
-      "! videoscale ! video/x-raw,width=%d,height=%d ! videoconvert ! "
-      "video/x-raw,format=RGB ! appsink name=appsink",
-      width, height, input_size, input_size);
+  std::string pipeline;
+  if (absl::StrContains(input_path, "/dev/video")) {
+    pipeline = absl::StrFormat(
+        "v4l2src device=%s !"
+        "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q " ! tee name=t t. !" LEAKY_Q
+        "! videoconvert ! rsvgoverlay name=rsvg ! videoconvert ! "
+        "glimagesink t. !" LEAKY_Q
+        "! videoscale ! video/x-raw,width=%d,height=%d ! videoconvert ! "
+        "video/x-raw,format=RGB ! appsink name=appsink",
+        input_path, width, height, input_size, input_size);
+  } else {
+    // Assuming that input is a video.
+    pipeline = absl::StrFormat(
+        "filesrc location=%s ! decodebin ! tee name=t t. ! queue ! videoconvert ! "
+        "videoscale ! video/x-raw,width=%d,height=%d ! rsvgoverlay name=rsvg ! "
+        "videoconvert ! autovideosink t. ! videoconvert ! videoscale ! "
+        "video/x-raw,width=%d,height=%d,format=RGB ! appsink name=appsink",
+        input_path, width, height, input_size, input_size);
+  }
+
   const gchar* kPipeline = pipeline.c_str();
 
   VLOG(2) << "Pipeline: " << pipeline.c_str();

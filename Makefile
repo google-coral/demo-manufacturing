@@ -36,7 +36,7 @@ BAZEL_BUILD_FLAGS := --crosstool_top=@crosstool//:toolchains \
                      --compiler=gcc \
                      --compilation_mode=$(COMPILATION_MODE) \
                      --copt=-DNPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION \
-                     --copt=-std=c++17 \
+                     --copt=-std=c++14 \
                      --verbose_failures \
                      --cpu=$(CPU) \
                      --experimental_repo_remote_exec

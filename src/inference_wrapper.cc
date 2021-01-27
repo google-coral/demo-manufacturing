@@ -94,17 +94,18 @@ std::vector<DetectionResult> InferenceWrapper::ParseOutputs(
   std::vector<DetectionResult> results;
   int n = lround(raw_output[3][0]);
   for (int i = 0; i < n; i++) {
-    int id = lround(raw_output[1][i]);
-    float score = raw_output[2][i];
-    if (score > threshold) {
-      DetectionResult result;
-      result.candidate = labels_.at(id);
-      result.score = score;
-      result.y1 = std::max(static_cast<float>(0.0), raw_output[0][4 * i]);
-      result.x1 = std::max(static_cast<float>(0.0), raw_output[0][4 * i + 1]);
-      result.y2 = std::min(static_cast<float>(1.0), raw_output[0][4 * i + 2]);
-      result.x2 = std::min(static_cast<float>(1.0), raw_output[0][4 * i + 3]);
-      results.push_back(result);
+    if (int id = lround(raw_output[1][i]); id == 0) {
+      float score = raw_output[2][i];
+      if (score > threshold) {
+        DetectionResult result;
+        result.candidate = labels_.at(id);
+        result.score = score;
+        result.y1 = std::max(static_cast<float>(0.0), raw_output[0][4 * i]);
+        result.x1 = std::max(static_cast<float>(0.0), raw_output[0][4 * i + 1]);
+        result.y2 = std::min(static_cast<float>(1.0), raw_output[0][4 * i + 2]);
+        result.x2 = std::min(static_cast<float>(1.0), raw_output[0][4 * i + 3]);
+        results.push_back(result);
+      }
     }
   }
   return results;
