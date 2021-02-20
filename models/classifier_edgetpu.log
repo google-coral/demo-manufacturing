@@ -1,0 +1,14 @@
+Edge TPU Compiler version 15.0.340273435
+Input: classifier.tflite
+Output: classifier_edgetpu.tflite
+
+Operator                       Count      Status
+
+PAD                            4          Mapped to Edge TPU
+MEAN                           1          Mapped to Edge TPU
+DEPTHWISE_CONV_2D              17         Mapped to Edge TPU
+SOFTMAX                        1          Mapped to Edge TPU
+QUANTIZE                       2          Mapped to Edge TPU
+CONV_2D                        36         Mapped to Edge TPU
+FULLY_CONNECTED                1          Mapped to Edge TPU
+ADD                            10         Mapped to Edge TPU

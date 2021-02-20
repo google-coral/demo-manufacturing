@@ -1,5 +1,5 @@
-#ifndef CAMERASTREAMER_H_
-#define CAMERASTREAMER_H_
+#ifndef MANUFACTURING_DEMO_CAMERASTREAMER_H_
+#define MANUFACTURING_DEMO_CAMERASTREAMER_H_
 
 #include <glib.h>
 #include <gst/gst.h>
@@ -18,23 +18,15 @@ public:
   virtual ~CameraStreamer() = default;
   CameraStreamer(const CameraStreamer&) = delete;
   CameraStreamer& operator=(const CameraStreamer&) = delete;
-
-  struct UserData {
-    std::function<void(
-        uint8_t* pixels, int length, GstElement* rsvg, InferenceWrapper& inferencer, uint16_t width,
-        uint16_t height, float threshold, Polygon& keepout_polygon)>
-        callback_func;
-    GstElement* rsvg;  // handle to gsstreamer rsvgoverlay module, used by
-                       // interpret_frame()
-    InferenceWrapper& inferencer;
-    uint16_t width, height;
-    float threshold;
-    Polygon& keepout_polygon;
+  // handle to gstreamer rsvgoverlay module, used by callbacks
+  struct CallbackData {
+    GstElement* rsvg;
+    std::function<void(GstElement*, uint8_t*, int)> cb;
   };
-
-  void RunPipeline(const gchar* pipeline_string, UserData user_data);
+  // Run pipeline with userdata and a callback fundtion
+  void run_pipeline(const gchar* pipeline_string, CallbackData callback_data);
 };
 
 }  // namespace coral
 
-#endif  // CAMERASTREAMER_H_
+#endif  // MANUFACTURING_DEMO_CAMERASTREAMER_H_

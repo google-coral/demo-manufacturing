@@ -56,8 +56,40 @@ InferenceWrapper::InferenceWrapper(const std::string& model_path, const std::str
   read_labels(labels_, label_path);
 }
 
-std::vector<DetectionResult> InferenceWrapper::GetDetectionResults(
-    const uint8_t* input_data, const int input_size, const float threshold) {
+ClassificationResult InferenceWrapper::get_classification_result(
+    const uint8_t* input_data, const int input_size) {
+  std::vector<float> output_data;
+  uint8_t* input = interpreter_->typed_input_tensor<uint8_t>(0);
+  std::memcpy(input, input_data, input_size);
+
+  CHECK_EQ(interpreter_->Invoke(), kTfLiteOk);
+
+  const auto& output_indices = interpreter_->outputs();
+  const auto* out_tensor = interpreter_->tensor(output_indices[0]);
+
+  float max_prob;
+  int max_index;
+  // Handles only uint8 or float outputs.
+  if (out_tensor->type == kTfLiteUInt8) {
+    const uint8_t* output = interpreter_->typed_output_tensor<uint8_t>(0);
+    max_index = std::max_element(output, output + out_tensor->bytes) - output;
+    // For uint8 output, we need to apply zero point amd scale.
+    max_prob = (output[max_index] - out_tensor->params.zero_point) * out_tensor->params.scale;
+  } else if (out_tensor->type == kTfLiteFloat32) {
+    const float* output = interpreter_->typed_output_tensor<float>(0);
+    max_index = std::max_element(output, output + out_tensor->bytes / sizeof(float)) - output;
+    max_prob = output[max_index];
+  } else {
+    std::cerr << "Tensor " << out_tensor->name
+              << " has unsupported output type: " << out_tensor->type << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  return {labels_[max_index], max_prob};
+}
+
+std::vector<DetectionResult> InferenceWrapper::get_detection_results(
+    const uint8_t* input_data, const int input_size, const float threshold,
+    const std::vector<int>& want_ids) {
   std::vector<std::vector<float>> output_data;
 
   uint8_t* input = interpreter_->typed_input_tensor<uint8_t>(0);
@@ -71,7 +103,8 @@ std::vector<DetectionResult> InferenceWrapper::GetDetectionResults(
   for (size_t i = 0; i < num_outputs; ++i) {
     const auto* out_tensor = interpreter_->tensor(output_indices[i]);
     CHECK_NOTNULL(out_tensor);
-    if (out_tensor->type == kTfLiteFloat32) {  // detection model out is Float32
+    if (out_tensor->type == kTfLiteFloat32) {
+      // detection model out is float32
       const size_t num_values = out_tensor->bytes / sizeof(float);
 
       const float* output = interpreter_->typed_output_tensor<float>(i);
@@ -86,15 +119,16 @@ std::vector<DetectionResult> InferenceWrapper::GetDetectionResults(
                  << "\n Tensor Name: " << out_tensor->name;
     }
   }
-  return ParseOutputs(output_data, threshold);
+  return parse_detection_outputs(output_data, threshold, want_ids);
 }
 
-std::vector<DetectionResult> InferenceWrapper::ParseOutputs(
-    const std::vector<std::vector<float>>& raw_output, const float threshold) {
+std::vector<DetectionResult> InferenceWrapper::parse_detection_outputs(
+    const std::vector<std::vector<float>>& raw_output, const float threshold,
+    const std::vector<int>& want_ids) {
   std::vector<DetectionResult> results;
   int n = lround(raw_output[3][0]);
   for (int i = 0; i < n; i++) {
-    if (int id = lround(raw_output[1][i]); id == 0) {
+    if (int id = lround(raw_output[1][i]); std::count(want_ids.begin(), want_ids.end(), id)) {
       float score = raw_output[2][i];
       if (score > threshold) {
         DetectionResult result;

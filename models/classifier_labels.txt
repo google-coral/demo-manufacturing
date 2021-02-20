@@ -1,0 +1,2 @@
+0 fresh_apple
+1 rotten_apple

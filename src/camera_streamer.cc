@@ -6,7 +6,7 @@ namespace coral {
 
 namespace {
 
-GstFlowReturn OnNewSample(GstElement* sink, void* data) {
+GstFlowReturn on_new_sample(GstElement* sink, void* data) {
   GstSample* sample;
   GstFlowReturn retval = GST_FLOW_OK;
 
@@ -15,11 +15,9 @@ GstFlowReturn OnNewSample(GstElement* sink, void* data) {
     GstMapInfo info;
     auto buf = gst_sample_get_buffer(sample);
     if (gst_buffer_map(buf, &info, GST_MAP_READ) == TRUE) {
+      auto cb_data = reinterpret_cast<CameraStreamer::CallbackData*>(data);
       // Pass the frame to the user callback
-      auto user_data = reinterpret_cast<CameraStreamer::UserData*>(data);
-      user_data->callback_func(
-          info.data, info.size, user_data->rsvg, user_data->inferencer, user_data->width,
-          user_data->height, user_data->threshold, user_data->keepout_polygon);
+      cb_data->cb(cb_data->rsvg, info.data, info.size);
     } else {
       LOG(ERROR) << "Couldn't get buffer info";
       retval = GST_FLOW_ERROR;
@@ -31,7 +29,7 @@ GstFlowReturn OnNewSample(GstElement* sink, void* data) {
   return retval;
 }
 
-gboolean OnBusMessage(GstBus* bus, GstMessage* msg, gpointer data) {
+gboolean on_bus_message(GstBus* bus, GstMessage* msg, gpointer data) {
   GMainLoop* loop = reinterpret_cast<GMainLoop*>(data);
 
   switch (GST_MESSAGE_TYPE(msg)) {
@@ -64,7 +62,7 @@ gboolean OnBusMessage(GstBus* bus, GstMessage* msg, gpointer data) {
 
 }  // namespace
 
-void CameraStreamer::RunPipeline(const gchar* pipeline_string, UserData user_data) {
+void CameraStreamer::run_pipeline(const gchar* pipeline_string, CallbackData callback_data) {
   gst_init(nullptr, nullptr);
   // Set up a pipeline based on the pipeline string
   auto loop = g_main_loop_new(nullptr, FALSE);
@@ -73,14 +71,12 @@ void CameraStreamer::RunPipeline(const gchar* pipeline_string, UserData user_dat
   CHECK_NOTNULL(pipeline);
   GstElement* rsvg = gst_bin_get_by_name(GST_BIN(pipeline), "rsvg");
   CHECK_NOTNULL(rsvg);
-  // Save handle to rsvgoverlay module for use in the callback
-  // interpret_frame()
-  user_data.rsvg = rsvg;
+  callback_data.rsvg = rsvg;
   // Add a bus watcher. It's safe to unref the bus immediately after
   auto bus = gst_element_get_bus(pipeline);
   CHECK_NOTNULL(bus);
 
-  gst_bus_add_watch(bus, OnBusMessage, loop);
+  gst_bus_add_watch(bus, on_bus_message, loop);
   gst_object_unref(bus);
 
   // Set up an appsink to pass frames to a user callback
@@ -88,7 +84,8 @@ void CameraStreamer::RunPipeline(const gchar* pipeline_string, UserData user_dat
   CHECK_NOTNULL(appsink);
 
   g_object_set(appsink, "emit-signals", true, nullptr);
-  g_signal_connect(appsink, "new-sample", reinterpret_cast<GCallback>(OnNewSample), &user_data);
+  g_signal_connect(
+      appsink, "new-sample", reinterpret_cast<GCallback>(on_new_sample), &callback_data);
 
   // Start the pipeline, runs until interrupted, EOS or error
   gst_element_set_state(pipeline, GST_STATE_PLAYING);

@@ -1,6 +1,5 @@
 /bazel-*
 /out
-/models
 
 ** Editors **
 *.swp

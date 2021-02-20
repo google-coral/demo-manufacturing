@@ -1,5 +1,5 @@
-#ifndef SHAPE_H_
-#define SHAPE_H_
+#ifndef MANUFACTURING_DEMO_SHAPE_H_
+#define MANUFACTURING_DEMO_SHAPE_H_
 
 #include <math.h>
 
@@ -76,4 +76,4 @@ Polygon parse_keepout_polygon(const std::string& file_path);
 
 }  // namespace coral
 
-#endif  // CAMERASTREAMER_H_
+#endif  // MANUFACTURING_DEMO_SHAPE_H_
