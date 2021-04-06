@@ -33,15 +33,19 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::string, classifier_labels, "models/classifier_labels.txt",
     "Path to classification labels file.");
-ABSL_FLAG(std::string, input_path, "/dev/video0", "Path to video source or file to run inference.");
+ABSL_FLAG(
+    std::string, worker_safety_input, "test_data/worker-zone-detection.mp4",
+    "Path to video source or file to run worker safety inference.");
+ABSL_FLAG(
+    std::string, visual_inspection_input, "test_data/apple.mp4",
+    "Path to video source or file to run visual inspection inference.");
 ABSL_FLAG(uint16_t, width, 640, "Input width.");
 ABSL_FLAG(uint16_t, height, 480, "Input height.");
 ABSL_FLAG(float, threshold, 0.6, "Minimum detection probability required to show bounding box.");
 ABSL_FLAG(
-    std::string, keepout_points_path, "",
+    std::string, keepout_points_path, "config/keepout_points.csv",
     "If provided, detection boxes will be colored based on if they are "
     "in the keepout region (red) or not (green).");
-ABSL_FLAG(bool, visual_inspection, false, "Run visual inspection demo instead.");
 
 namespace {
 
@@ -195,6 +199,36 @@ void visual_inspection_callback(
 
 }  // namespace callback_helper
 
+static std::string generate_pipeline_string(
+    const std::string input_path, const uint16_t width, const uint16_t height,
+    const size_t detector_input_size, const std::string demo_name) {
+  std::string pipeline;
+  if (absl::StrContains(input_path, "/dev/video")) {
+    pipeline = absl::StrFormat(
+        "v4l2src device=%s !"
+        "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q
+        " ! tee name=t_%s "
+        "t_%s. !" LEAKY_Q
+        "! videoconvert ! rsvgoverlay name=rsvg_%s ! videoconvert ! m. \n"
+        "t_%s. !" LEAKY_Q
+        "! videoscale ! video/x-raw,width=%d,height=%d ! "
+        "videoconvert ! video/x-raw,format=RGB ! appsink name=appsink_%s\n",
+        input_path, width, height, demo_name, demo_name, demo_name, demo_name, detector_input_size,
+        detector_input_size, demo_name);
+  } else {
+    // Assuming that input is a video.
+    pipeline = absl::StrFormat(
+        "filesrc location=%s ! decodebin ! tee name=t_%s "
+        "t_%s. ! queue ! videoconvert ! videoscale ! video/x-raw,width=%d,height=%d ! "
+        "rsvgoverlay name=rsvg_%s ! videoconvert ! m.\n"
+        "t_%s. ! videoconvert ! videoscale ! "
+        "video/x-raw,width=%d,height=%d,format=RGB ! appsink name=appsink_%s\n",
+        input_path, demo_name, demo_name, width, height, demo_name, demo_name, detector_input_size,
+        detector_input_size, demo_name);
+  }
+  return pipeline;
+}
+
 int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
   absl::ParseCommandLine(argc, argv);
@@ -213,51 +247,43 @@ int main(int argc, char* argv[]) {
   check_file(classifier_model_path.c_str());
 
   coral::CameraStreamer streamer;
-  const auto input_path = absl::GetFlag(FLAGS_input_path);
+  const auto safety_input_path = absl::GetFlag(FLAGS_worker_safety_input);
+  const auto visual_inspection_path = absl::GetFlag(FLAGS_visual_inspection_input);
 
   InferenceWrapper detector(detection_model_path, detection_label_path);
   size_t detector_input_size = detector.get_input_size();
 
-  std::string pipeline;
-  if (absl::StrContains(input_path, "/dev/video")) {
-    pipeline = absl::StrFormat(
-        "v4l2src device=%s !"
-        "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q " ! tee name=t t. !" LEAKY_Q
-        "! videoconvert ! rsvgoverlay name=rsvg ! videoconvert ! "
-        "glimagesink t. !" LEAKY_Q
-        "! videoscale ! video/x-raw,width=%d,height=%d ! videoconvert ! "
-        "video/x-raw,format=RGB ! appsink name=appsink",
-        input_path, width, height, detector_input_size, detector_input_size);
-  } else {
-    // Assuming that input is a video.
-    pipeline = absl::StrFormat(
-        "filesrc location=%s ! decodebin ! tee name=t t. ! queue ! videoconvert ! "
-        "videoscale ! video/x-raw,width=%d,height=%d ! rsvgoverlay name=rsvg ! "
-        "videoconvert ! autovideosink sync=false t. ! videoconvert ! videoscale ! "
-        "video/x-raw,width=%d,height=%d,format=RGB ! appsink name=appsink",
-        input_path, width, height, detector_input_size, detector_input_size);
-  }
+  // Begins pipeline with a mixer for combining both streams.
+  std::string pipeline = absl::StrFormat(
+      "glvideomixer name=m sink_0::xpos=0 name=m "
+      "sink_1::xpos=%d ! autovideosink name=overlaysink sync=false \n",
+      width);
+
+  // Begins pipelines with Worker Safety.
+  pipeline += generate_pipeline_string(
+      safety_input_path, width, height, detector_input_size, coral::kWorkerSafety);
+
+  // Next, adds in the Visual Inspection.
+  pipeline += generate_pipeline_string(
+      visual_inspection_path, width, height, detector_input_size, coral::kVisualInspection);
 
   const gchar* kPipeline = pipeline.c_str();
   VLOG(2) << "Pipeline: " << pipeline.c_str();
 
-  if (absl::GetFlag(FLAGS_visual_inspection)) {
-    LOG(INFO) << "Starting Visual Inspection Demo\n";
-    InferenceWrapper classifier(classifier_model_path, classifier_label_path);
-    streamer.run_pipeline(
-        /*pipeline_string=*/kPipeline, /*callback_data=*/{
-            /*rsvg=*/nullptr, /*cb=*/[&](GstElement* rsvg, uint8_t* pixels, int pixel_length) {
-              callback_helper::visual_inspection_callback(
-                  rsvg, pixels, pixel_length, detector, classifier, width, height, threshold);
-            }});
-  } else {
-    LOG(INFO) << "Starting Worker Safety Demo\n";
-    auto keepout_polygon = coral::parse_keepout_polygon(absl::GetFlag(FLAGS_keepout_points_path));
-    streamer.run_pipeline(
-        /*pipeline_string=*/kPipeline, /*callback_data=*/{
-            /*rsvg=*/nullptr, /*cb=*/[&](GstElement* rsvg, uint8_t* pixels, int pixel_length) {
-              callback_helper::worker_safety_callback(
-                  rsvg, pixels, pixel_length, detector, width, height, threshold, keepout_polygon);
-            }});
-  }
+  LOG(INFO) << "Starting Visual Inspection Demo\n";
+  InferenceWrapper classifier(classifier_model_path, classifier_label_path);
+  auto keepout_polygon = coral::parse_keepout_polygon(absl::GetFlag(FLAGS_keepout_points_path));
+  streamer.run_pipeline(
+      /*pipeline_string=*/kPipeline,
+      /*safety_callback_data=*/
+      {/*rsvg=*/nullptr, /*cb=*/
+       [&](GstElement* rsvg, uint8_t* pixels, int pixel_length) {
+         callback_helper::worker_safety_callback(
+             rsvg, pixels, pixel_length, detector, width, height, threshold, keepout_polygon);
+       }},
+      /*inspection_callback_data=*/
+      {/*rsvg=*/nullptr, /*cb=*/[&](GstElement* rsvg, uint8_t* pixels, int pixel_length) {
+         callback_helper::visual_inspection_callback(
+             rsvg, pixels, pixel_length, detector, classifier, width, height, threshold);
+       }});
 }

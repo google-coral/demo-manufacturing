@@ -1,5 +1,7 @@
 #include "camera_streamer.h"
 
+#include "absl/strings/str_format.h"
+#include "absl/strings/substitute.h"
 #include "glog/logging.h"
 
 namespace coral {
@@ -62,30 +64,41 @@ gboolean on_bus_message(GstBus* bus, GstMessage* msg, gpointer data) {
 
 }  // namespace
 
-void CameraStreamer::run_pipeline(const gchar* pipeline_string, CallbackData callback_data) {
+void CameraStreamer::prepare_pipeline(
+    GstElement* pipeline, const std::string name, CallbackData* callback_data) {
+  GstElement* rsvg = gst_bin_get_by_name(GST_BIN(pipeline), absl::StrCat("rsvg_", name).c_str());
+  CHECK_NOTNULL(rsvg);
+  callback_data->rsvg = rsvg;
+
+  // Set up an appsink to pass frames to a user callback
+  auto appsink = gst_bin_get_by_name(
+      reinterpret_cast<GstBin*>(pipeline), absl::StrCat("appsink_", name).c_str());
+  CHECK_NOTNULL(appsink);
+
+  g_object_set(appsink, "emit-signals", true, nullptr);
+  g_signal_connect(
+      appsink, "new-sample", reinterpret_cast<GCallback>(on_new_sample), callback_data);
+}
+
+void CameraStreamer::run_pipeline(
+    const gchar* pipeline_string, CallbackData safety_callback_data,
+    CallbackData inspection_callback_data) {
   gst_init(nullptr, nullptr);
   // Set up a pipeline based on the pipeline string
   auto loop = g_main_loop_new(nullptr, FALSE);
   CHECK_NOTNULL(loop);
   auto pipeline = gst_parse_launch(pipeline_string, nullptr);
   CHECK_NOTNULL(pipeline);
-  GstElement* rsvg = gst_bin_get_by_name(GST_BIN(pipeline), "rsvg");
-  CHECK_NOTNULL(rsvg);
-  callback_data.rsvg = rsvg;
+
+  // Prepare each part of the pipeline
+  prepare_pipeline(pipeline, coral::kWorkerSafety, &safety_callback_data);
+  prepare_pipeline(pipeline, coral::kVisualInspection, &inspection_callback_data);
+
   // Add a bus watcher. It's safe to unref the bus immediately after
   auto bus = gst_element_get_bus(pipeline);
   CHECK_NOTNULL(bus);
-
   gst_bus_add_watch(bus, on_bus_message, loop);
   gst_object_unref(bus);
-
-  // Set up an appsink to pass frames to a user callback
-  auto appsink = gst_bin_get_by_name(reinterpret_cast<GstBin*>(pipeline), "appsink");
-  CHECK_NOTNULL(appsink);
-
-  g_object_set(appsink, "emit-signals", true, nullptr);
-  g_signal_connect(
-      appsink, "new-sample", reinterpret_cast<GCallback>(on_new_sample), &callback_data);
 
   // Start the pipeline, runs until interrupted, EOS or error
   gst_element_set_state(pipeline, GST_STATE_PLAYING);

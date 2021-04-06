@@ -12,6 +12,9 @@
 
 namespace coral {
 
+const std::string kVisualInspection = "inspection";
+const std::string kWorkerSafety = "safety";
+
 class CameraStreamer {
 public:
   CameraStreamer() = default;
@@ -24,7 +27,12 @@ public:
     std::function<void(GstElement*, uint8_t*, int)> cb;
   };
   // Run pipeline with userdata and a callback fundtion
-  void run_pipeline(const gchar* pipeline_string, CallbackData callback_data);
+  void run_pipeline(
+      const gchar* pipeline_string, CallbackData safety_callback_data,
+      CallbackData inspection_callback_data);
+
+private:
+  void prepare_pipeline(GstElement* pipeline, const std::string name, CallbackData* callback_data);
 };
 
 }  // namespace coral
