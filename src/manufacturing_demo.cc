@@ -39,9 +39,9 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::string, visual_inspection_input, "test_data/apple.mp4",
     "Path to video source or file to run visual inspection inference.");
-ABSL_FLAG(uint16_t, width, 640, "Input width.");
-ABSL_FLAG(uint16_t, height, 480, "Input height.");
-ABSL_FLAG(float, threshold, 0.6, "Minimum detection probability required to show bounding box.");
+ABSL_FLAG(uint16_t, width, 960, "Width to scale both inputs to.");
+ABSL_FLAG(uint16_t, height, 540, "Height to scale both inputs to.");
+ABSL_FLAG(float, threshold, 0.5, "Minimum detection probability required to show bounding box.");
 ABSL_FLAG(
     std::string, keepout_points_path, "config/keepout_points.csv",
     "If provided, detection boxes will be colored based on if they are "
@@ -221,7 +221,7 @@ static std::string generate_pipeline_string(
         "filesrc location=%s ! decodebin ! tee name=t_%s "
         "t_%s. ! queue ! videoconvert ! videoscale ! video/x-raw,width=%d,height=%d ! "
         "rsvgoverlay name=rsvg_%s ! videoconvert ! m.\n"
-        "t_%s. ! videoconvert ! videoscale ! "
+        "t_%s. ! queue ! videoconvert ! videoscale ! "
         "video/x-raw,width=%d,height=%d,format=RGB ! appsink name=appsink_%s\n",
         input_path, demo_name, demo_name, width, height, demo_name, demo_name, detector_input_size,
         detector_input_size, demo_name);
