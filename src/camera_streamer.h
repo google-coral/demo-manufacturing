@@ -9,6 +9,7 @@
 
 #include "inference_wrapper.h"
 #include "keepout_shape.h"
+#include "svg_generator.h"
 
 namespace coral {
 
@@ -23,16 +24,16 @@ public:
   CameraStreamer& operator=(const CameraStreamer&) = delete;
   // handle to gstreamer rsvgoverlay module, used by callbacks
   struct CallbackData {
-    GstElement* rsvg;
-    std::function<void(GstElement*, uint8_t*, int)> cb;
+    SvgGenerator* svg_gen;
+    std::function<void(SvgGenerator*, uint8_t*, int)> cb;
   };
-  // Run pipeline with userdata and a callback fundtion
+  // Run pipeline with userdata and a callback function.
   void run_pipeline(
       const gchar* pipeline_string, CallbackData safety_callback_data,
       CallbackData inspection_callback_data);
 
 private:
-  void prepare_pipeline(GstElement* pipeline, const std::string name, CallbackData* callback_data);
+  void prepare_appsink(GstElement* pipeline, const std::string name, CallbackData* callback_data);
 };
 
 }  // namespace coral

@@ -1,7 +1,7 @@
 cc_library(
     name = "camera_streamer",
     srcs = ["camera_streamer.cc"],
-    hdrs = ["camera_streamer.h"],
+    hdrs = ["camera_streamer.h", "svg_generator.h"],
     deps = [
 	    ":keepout_shape",
 	    ":inference_wrapper",

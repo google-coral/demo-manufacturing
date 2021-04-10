@@ -19,8 +19,11 @@
 using coral::Box;
 using coral::CameraStreamer;
 using coral::InferenceWrapper;
+using coral::kSvgBox;
+using coral::kSvgText;
 using coral::Point;
 using coral::Polygon;
+using coral::SvgGenerator;
 
 ABSL_FLAG(
     std::string, detection_model, "models/ssdlite_mobiledet_coco_qat_postprocess_edgetpu.tflite",
@@ -49,14 +52,6 @@ ABSL_FLAG(
 
 namespace {
 
-constexpr char* kSvgHeader = "<svg>";
-constexpr char* kSvgFooter = "</svg>";
-constexpr char* kSvgBox =
-    "<rect x=\"$0\" y=\"$1\" width=\"$2\" height=\"$3\" "
-    "fill-opacity=\"0.0\" "
-    "style=\"stroke-width:5;stroke:rgb($4,$5,$6);\"/>";
-constexpr char* kSvgText = "<text x=\"$0\" y=\"$1\" font-size=\"large\" fill=\"$2\">$3</text>";
-
 // GStreamer definitions
 #define LEAKY_Q " queue max-size-buffers=1 leaky=downstream "
 
@@ -72,7 +67,7 @@ void check_file(const char* file) {
 namespace callback_helper {
 // Callback function for the manufacturing demo called from the appsink on every new frame
 void worker_safety_callback(
-    GstElement* rsvg, const uint8_t* pixels, int pixel_length, InferenceWrapper& detector,
+    SvgGenerator* svg_gen, const uint8_t* pixels, int pixel_length, InferenceWrapper& detector,
     int width, int height, float threshold, Polygon& keepout_polygon) {
   static int frame_num = 0;
   std::string box_list;
@@ -125,18 +120,17 @@ void worker_safety_callback(
     label_list = absl::StrCat(label_list, label_str);
   }
   if (keepout_polygon.get_svg_str() == "None") {
-    svg = absl::StrCat(kSvgHeader, box_list, label_list, kSvgFooter);
+    svg = absl::StrCat(box_list, label_list);
   } else {
-    svg = absl::StrCat(kSvgHeader, keepout_polygon.get_svg_str(), box_list, label_list, kSvgFooter);
+    svg = absl::StrCat(keepout_polygon.get_svg_str(), box_list, label_list);
   }
   VLOG(5) << svg;
-  // Push SVG data into the gstreamer module rsvgoverlay.
-  g_object_set(G_OBJECT(rsvg), "data", svg.c_str(), NULL);
+  svg_gen->set_worker_safety_svg(svg.c_str());
 }
 
 // Callback function for the visual inspection demo called from the appsink on every new frame
 void visual_inspection_callback(
-    GstElement* rsvg, uint8_t* pixels, int pixel_length, InferenceWrapper& detector,
+    SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length, InferenceWrapper& detector,
     InferenceWrapper& classifier, int width, int height, float threshold) {
   static int frame_num = 0;
   std::string box_list;
@@ -173,28 +167,25 @@ void visual_inspection_callback(
       if (classification.candidate == "fresh_apple") {
         // Fresh Apple.
         box_str = absl::Substitute(
-            kSvgBox, result.x1 * width, result.y1 * height, w, h, 0, 255,
+            kSvgBox, result.x1 * width + width, result.y1 * height, w, h, 0, 255,
             0);  // Green
         label_str = absl::Substitute(
-            kSvgText, result.x1 * width, (result.y1 * height) - 5, "lightgreen",
+            kSvgText, result.x1 * width + width, (result.y1 * height) - 5, "lightgreen",
             absl::StrCat(classification.candidate, ": ", classification.score));
       } else {
         // Rotten Apple.
         box_str = absl::Substitute(
-            kSvgBox, result.x1 * width, result.y1 * height, w, h, 255, 0,
+            kSvgBox, result.x1 * width + width, result.y1 * height, w, h, 255, 0,
             0);  // Red
         label_str = absl::Substitute(
-            kSvgText, result.x1 * width, (result.y1 * height) - 5, "red",
+            kSvgText, result.x1 * width + width, (result.y1 * height) - 5, "red",
             absl::StrCat(classification.candidate, ": ", classification.score));
       }
     }
     box_list = absl::StrCat(box_list, box_str);
     label_list = absl::StrCat(label_list, label_str);
   }
-  svg = absl::StrCat(kSvgHeader, box_list, label_list, kSvgFooter);
-  VLOG(5) << svg;
-  // Push SVG data into the gstreamer module rsvgoverlay.
-  g_object_set(G_OBJECT(rsvg), "data", svg.c_str(), NULL);
+  svg_gen->set_visual_inspection_svg(absl::StrCat(box_list, label_list).c_str());
 }
 
 }  // namespace callback_helper
@@ -209,21 +200,21 @@ static std::string generate_pipeline_string(
         "video/x-raw,framerate=30/1,width=%d,height=%d ! " LEAKY_Q
         " ! tee name=t_%s "
         "t_%s. !" LEAKY_Q
-        "! videoconvert ! rsvgoverlay name=rsvg_%s ! videoconvert ! m. \n"
+        " ! videoconvert ! m. \n"
         "t_%s. !" LEAKY_Q
-        "! videoscale ! video/x-raw,width=%d,height=%d ! "
+        " ! videoscale ! video/x-raw,width=%d,height=%d ! "
         "videoconvert ! video/x-raw,format=RGB ! appsink name=appsink_%s\n",
-        input_path, width, height, demo_name, demo_name, demo_name, demo_name, detector_input_size,
+        input_path, width, height, demo_name, demo_name, demo_name, detector_input_size,
         detector_input_size, demo_name);
   } else {
     // Assuming that input is a video.
     pipeline = absl::StrFormat(
         "filesrc location=%s ! decodebin ! tee name=t_%s "
         "t_%s. ! queue ! videoconvert ! videoscale ! video/x-raw,width=%d,height=%d ! "
-        "rsvgoverlay name=rsvg_%s ! videoconvert ! m.\n"
+        "videoconvert ! m.\n"
         "t_%s. ! queue ! videoconvert ! videoscale ! "
         "video/x-raw,width=%d,height=%d,format=RGB ! appsink name=appsink_%s\n",
-        input_path, demo_name, demo_name, width, height, demo_name, demo_name, detector_input_size,
+        input_path, demo_name, demo_name, width, height, demo_name, detector_input_size,
         detector_input_size, demo_name);
   }
   return pipeline;
@@ -256,7 +247,7 @@ int main(int argc, char* argv[]) {
   // Begins pipeline with a mixer for combining both streams.
   std::string pipeline = absl::StrFormat(
       "glvideomixer name=m sink_0::xpos=0 name=m "
-      "sink_1::xpos=%d ! autovideosink name=overlaysink sync=false \n",
+      "sink_1::xpos=%d ! rsvgoverlay name=rsvg ! autovideosink name=overlaysink sync=false \n",
       width);
 
   // Begins pipelines with Worker Safety.
@@ -270,20 +261,20 @@ int main(int argc, char* argv[]) {
   const gchar* kPipeline = pipeline.c_str();
   VLOG(2) << "Pipeline: " << pipeline.c_str();
 
-  LOG(INFO) << "Starting Visual Inspection Demo\n";
+  LOG(INFO) << "Starting Manufacturing Demo\n";
   InferenceWrapper classifier(classifier_model_path, classifier_label_path);
   auto keepout_polygon = coral::parse_keepout_polygon(absl::GetFlag(FLAGS_keepout_points_path));
   streamer.run_pipeline(
       /*pipeline_string=*/kPipeline,
       /*safety_callback_data=*/
-      {/*rsvg=*/nullptr, /*cb=*/
-       [&](GstElement* rsvg, uint8_t* pixels, int pixel_length) {
+      {/*svg_gen=*/nullptr, /*cb=*/
+       [&](SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length) {
          callback_helper::worker_safety_callback(
-             rsvg, pixels, pixel_length, detector, width, height, threshold, keepout_polygon);
+             svg_gen, pixels, pixel_length, detector, width, height, threshold, keepout_polygon);
        }},
       /*inspection_callback_data=*/
-      {/*rsvg=*/nullptr, /*cb=*/[&](GstElement* rsvg, uint8_t* pixels, int pixel_length) {
+      {/*svg_gen=*/nullptr, /*cb=*/[&](SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length) {
          callback_helper::visual_inspection_callback(
-             rsvg, pixels, pixel_length, detector, classifier, width, height, threshold);
+             svg_gen, pixels, pixel_length, detector, classifier, width, height, threshold);
        }});
 }

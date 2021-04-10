@@ -19,7 +19,7 @@ GstFlowReturn on_new_sample(GstElement* sink, void* data) {
     if (gst_buffer_map(buf, &info, GST_MAP_READ) == TRUE) {
       auto cb_data = reinterpret_cast<CameraStreamer::CallbackData*>(data);
       // Pass the frame to the user callback
-      cb_data->cb(cb_data->rsvg, info.data, info.size);
+      cb_data->cb(cb_data->svg_gen, info.data, info.size);
     } else {
       LOG(ERROR) << "Couldn't get buffer info";
       retval = GST_FLOW_ERROR;
@@ -64,12 +64,8 @@ gboolean on_bus_message(GstBus* bus, GstMessage* msg, gpointer data) {
 
 }  // namespace
 
-void CameraStreamer::prepare_pipeline(
+void CameraStreamer::prepare_appsink(
     GstElement* pipeline, const std::string name, CallbackData* callback_data) {
-  GstElement* rsvg = gst_bin_get_by_name(GST_BIN(pipeline), absl::StrCat("rsvg_", name).c_str());
-  CHECK_NOTNULL(rsvg);
-  callback_data->rsvg = rsvg;
-
   // Set up an appsink to pass frames to a user callback
   auto appsink = gst_bin_get_by_name(
       reinterpret_cast<GstBin*>(pipeline), absl::StrCat("appsink_", name).c_str());
@@ -90,9 +86,15 @@ void CameraStreamer::run_pipeline(
   auto pipeline = gst_parse_launch(pipeline_string, nullptr);
   CHECK_NOTNULL(pipeline);
 
-  // Prepare each part of the pipeline
-  prepare_pipeline(pipeline, coral::kWorkerSafety, &safety_callback_data);
-  prepare_pipeline(pipeline, coral::kVisualInspection, &inspection_callback_data);
+  GstElement* rsvg = gst_bin_get_by_name(GST_BIN(pipeline), "rsvg");
+  CHECK_NOTNULL(rsvg);
+  SvgGenerator svg_gen(rsvg);
+  safety_callback_data.svg_gen = &svg_gen;
+  inspection_callback_data.svg_gen = &svg_gen;
+
+  // Prepare each appsink, ensuring the right frames reach their callback.
+  prepare_appsink(pipeline, coral::kWorkerSafety, &safety_callback_data);
+  prepare_appsink(pipeline, coral::kVisualInspection, &inspection_callback_data);
 
   // Add a bus watcher. It's safe to unref the bus immediately after
   auto bus = gst_element_get_bus(pipeline);
