@@ -246,8 +246,8 @@ int main(int argc, char* argv[]) {
 
   // Begins pipeline with a mixer for combining both streams.
   std::string pipeline = absl::StrFormat(
-      "glvideomixer name=m sink_0::xpos=0 name=m "
-      "sink_1::xpos=%d ! rsvgoverlay name=rsvg ! autovideosink name=overlaysink sync=false \n",
+      "glvideomixer name=m sink_0::xpos=0 "
+      "sink_1::xpos=%d ! rsvgoverlay name=rsvg ! videoconvert ! autovideosink name=overlaysink sync=false \n",
       width);
 
   // Begins pipelines with Worker Safety.
