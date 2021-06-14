@@ -18,7 +18,7 @@ This demo is able to achieve realtime processing and display by taking advantage
 
 **Worker Safety**
 
-For worker safety, a keepout region is defined (from a [CSV file](config/keepout_points.csv)) and MobileDet (trained on COCO17 dataset) is run to detect people. When a person is outside of this region the bounding box is green, if they are within it is red. The algorithm for determining collisions can be found in [keepout_shape.cc](src/keepout_shape.cc).
+For worker safety, a keepout region is defined (from a [CSV file](config/keepout_points.csv)) and MobileDet (trained on COCO17 dataset) is run to detect people. When a person is outside of this region the bounding box is green, if they are within it is red. The algorithm for determining collisions can be found in [keepout_shape.cc](src/keepout_shape.cc). The collision detection offers two options, based on the `safety_check_whole_box` flag. If that flag is true, a collision will be reported whenever the detected box overlaps the keepout polygon (designed for overhead cameras). If false, it will report a collision when the bottom of the box collides with the polygon (intended for a high-angle camera) because the bottom of the box indicates the person's feet.
 
 The default video is taken from [this repo](https://github.com/intel-iot-devkit/sample-videos).
 

@@ -21,6 +21,12 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/substitute.h"
 
+ABSL_FLAG(
+    bool, safety_check_whole_box, false,
+    "The worker safety demo should check for collisions on the entire "
+    "detected box (better for cameras overhead) over just checking the "
+    "bottom (for high-angle/diagonal feeds).");
+
 namespace coral {
 
 const double Point::get_distance(const Point& p) const {
@@ -71,6 +77,7 @@ Box::Box(int x1, int y1, int x2, int y2) {
   lines_.emplace_back(points_[1], points_[2]);
   lines_.emplace_back(points_[2], points_[3]);
   lines_.emplace_back(points_[3], points_[0]);
+  bottom_y_ = std::max(y1, y2);
 }
 const bool Box::intersects_line(const Line& l) const {
   for (const auto& line : lines_) {
@@ -83,6 +90,11 @@ const bool Box::intersects_line(const Line& l) const {
 const bool Box::collided_with_polygon(const Polygon& p, const uint32_t max_width) const {
   const auto& polygon_lines = p.get_lines();
   for (const auto& p : points_) {
+    // If not checking the whole box, ignore points that aren't on the
+    // bottom of the box.
+    if (!absl::GetFlag(FLAGS_safety_check_whole_box) && p.y_ != bottom_y_) {
+      continue;
+    }
     size_t intersect_time{0};
     // We create a horizontal line from this point to max image width, if
     // it interects the lines in the polygon even time, it is not inside
@@ -104,6 +116,12 @@ const bool Box::collided_with_polygon(const Polygon& p, const uint32_t max_width
   }
   // Check for line intersection between this box and the polygon.
   for (const auto& box_line : lines_) {
+    // If not checking the whole box, skip all lines that don't have the y
+    // coordinate equal to the bottom of the box.
+    if (!absl::GetFlag(FLAGS_safety_check_whole_box)
+        && (box_line.begin_.y_ != bottom_y_ || box_line.end_.y_ != bottom_y_)) {
+      continue;
+    }
     for (const auto& polygon_line : p.get_lines()) {
       if (box_line.intersects_line(polygon_line)) {
         return true;

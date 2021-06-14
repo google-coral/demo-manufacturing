@@ -86,6 +86,7 @@ public:
 private:
   std::vector<Point> points_;
   std::vector<Line> lines_;
+  int bottom_y_;
 };
 
 Polygon parse_keepout_polygon(const std::string& file_path);
