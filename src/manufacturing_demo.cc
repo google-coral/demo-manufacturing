@@ -59,7 +59,8 @@ ABSL_FLAG(
 ABSL_FLAG(bool, anonymize, false, "Anonymize detected workers in safety demo.");
 ABSL_FLAG(uint16_t, width, 960, "Width to scale both inputs to.");
 ABSL_FLAG(uint16_t, height, 540, "Height to scale both inputs to.");
-ABSL_FLAG(float, threshold, 0.4, "Minimum detection probability required to show bounding box.");
+ABSL_FLAG(float, worker_threshold, 0.3, "Minimum detection probability required to show bounding box for worker safety.");
+ABSL_FLAG(float, inspection_threshold, 0.7, "Minimum detection probability required to show bounding box for visual inspection.");
 ABSL_FLAG(
     std::string, keepout_points_path, "config/keepout_points.csv",
     "If provided, detection boxes will be colored based on if they are "
@@ -246,7 +247,8 @@ int main(int argc, char* argv[]) {
   std::string classifier_label_path = absl::GetFlag(FLAGS_classifier_labels);
   const uint16_t width = absl::GetFlag(FLAGS_width);
   const uint16_t height = absl::GetFlag(FLAGS_height);
-  const float threshold = absl::GetFlag(FLAGS_threshold);
+  const float worker_threshold = absl::GetFlag(FLAGS_worker_threshold);
+  const float inspection_threshold = absl::GetFlag(FLAGS_inspection_threshold);
   const bool anon = absl::GetFlag(FLAGS_anonymize);
 
   check_file(detection_model_path.c_str());
@@ -287,11 +289,11 @@ int main(int argc, char* argv[]) {
       {/*svg_gen=*/nullptr, /*cb=*/
        [&](SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length) {
          callback_helper::worker_safety_callback(
-             svg_gen, pixels, pixel_length, detector, width, height, threshold, keepout_polygon, anon);
+             svg_gen, pixels, pixel_length, detector, width, height, worker_threshold, keepout_polygon, anon);
        }},
       /*inspection_callback_data=*/
       {/*svg_gen=*/nullptr, /*cb=*/[&](SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length) {
          callback_helper::visual_inspection_callback(
-             svg_gen, pixels, pixel_length, detector, classifier, width, height, threshold);
+             svg_gen, pixels, pixel_length, detector, classifier, width, height, inspection_threshold);
        }});
 }
