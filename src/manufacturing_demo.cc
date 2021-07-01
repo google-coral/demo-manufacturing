@@ -56,9 +56,10 @@ ABSL_FLAG(
 ABSL_FLAG(
     std::string, visual_inspection_input, "test_data/apple.mp4",
     "Path to video source or file to run visual inspection inference.");
+ABSL_FLAG(bool, anonymize, false, "Anonymize detected workers in safety demo.");
 ABSL_FLAG(uint16_t, width, 960, "Width to scale both inputs to.");
 ABSL_FLAG(uint16_t, height, 540, "Height to scale both inputs to.");
-ABSL_FLAG(float, threshold, 0.5, "Minimum detection probability required to show bounding box.");
+ABSL_FLAG(float, threshold, 0.4, "Minimum detection probability required to show bounding box.");
 ABSL_FLAG(
     std::string, keepout_points_path, "config/keepout_points.csv",
     "If provided, detection boxes will be colored based on if they are "
@@ -82,7 +83,7 @@ namespace callback_helper {
 // Callback function for the manufacturing demo called from the appsink on every new frame
 void worker_safety_callback(
     SvgGenerator* svg_gen, const uint8_t* pixels, int pixel_length, InferenceWrapper& detector,
-    int width, int height, float threshold, Polygon& keepout_polygon) {
+    int width, int height, float threshold, Polygon& keepout_polygon, bool anon) {
   static int frame_num = 0;
   std::string box_list;
   std::string label_list;
@@ -101,6 +102,7 @@ void worker_safety_callback(
     int w, h;
     w = (result.x2 - result.x1) * width;
     h = (result.y2 - result.y1) * height;
+    float opacity = anon ? 1.0 : 0.0;
     // Checks if this box collided with the keepout.
     const auto& polygon_svg = keepout_polygon.get_svg_str();
     if (polygon_svg != "None") {
@@ -108,14 +110,14 @@ void worker_safety_callback(
       Box b{result.x1 * width, result.y1 * height, result.x2 * width, result.y2 * height};
       if (b.collided_with_polygon(keepout_polygon, width)) {
         box_str = absl::Substitute(
-            kSvgBox, result.x1 * width, result.y1 * height, w, h, 255, 0,
+            kSvgBox, result.x1 * width, result.y1 * height, w, h, opacity, 255, 0,
             0);  // Red
         label_str = absl::Substitute(
             kSvgText, result.x1 * width, (result.y1 * height) - 5, "red",
             absl::StrCat(result.candidate, ": ", result.score));
       } else {
         box_str = absl::Substitute(
-            kSvgBox, result.x1 * width, result.y1 * height, w, h, 0, 255,
+            kSvgBox, result.x1 * width, result.y1 * height, w, h, opacity, 0, 255,
             0);  // Green
         label_str = absl::Substitute(
             kSvgText, result.x1 * width, (result.y1 * height) - 5, "lightgreen",
@@ -124,7 +126,7 @@ void worker_safety_callback(
     } else {
       // Don't check for keepout.
       box_str = absl::Substitute(
-          kSvgBox, result.x1 * width, result.y1 * height, w, h, 0, 255,
+          kSvgBox, result.x1 * width, result.y1 * height, w, h, opacity, 0, 255,
           0);  // Green
       label_str = absl::Substitute(
           kSvgText, result.x1 * width, (result.y1 * height) - 5, "lightgreen",
@@ -181,7 +183,7 @@ void visual_inspection_callback(
       if (classification.candidate == "fresh_apple") {
         // Fresh Apple.
         box_str = absl::Substitute(
-            kSvgBox, result.x1 * width + width, result.y1 * height, w, h, 0, 255,
+            kSvgBox, result.x1 * width + width, result.y1 * height, w, h, 0.0, 0, 255,
             0);  // Green
         label_str = absl::Substitute(
             kSvgText, result.x1 * width + width, (result.y1 * height) - 5, "lightgreen",
@@ -189,7 +191,7 @@ void visual_inspection_callback(
       } else {
         // Rotten Apple.
         box_str = absl::Substitute(
-            kSvgBox, result.x1 * width + width, result.y1 * height, w, h, 255, 0,
+            kSvgBox, result.x1 * width + width, result.y1 * height, w, h, 0.0, 255, 0,
             0);  // Red
         label_str = absl::Substitute(
             kSvgText, result.x1 * width + width, (result.y1 * height) - 5, "red",
@@ -245,6 +247,7 @@ int main(int argc, char* argv[]) {
   const uint16_t width = absl::GetFlag(FLAGS_width);
   const uint16_t height = absl::GetFlag(FLAGS_height);
   const float threshold = absl::GetFlag(FLAGS_threshold);
+  const bool anon = absl::GetFlag(FLAGS_anonymize);
 
   check_file(detection_model_path.c_str());
   check_file(detection_label_path.c_str());
@@ -284,7 +287,7 @@ int main(int argc, char* argv[]) {
       {/*svg_gen=*/nullptr, /*cb=*/
        [&](SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length) {
          callback_helper::worker_safety_callback(
-             svg_gen, pixels, pixel_length, detector, width, height, threshold, keepout_polygon);
+             svg_gen, pixels, pixel_length, detector, width, height, threshold, keepout_polygon, anon);
        }},
       /*inspection_callback_data=*/
       {/*svg_gen=*/nullptr, /*cb=*/[&](SvgGenerator* svg_gen, uint8_t* pixels, int pixel_length) {

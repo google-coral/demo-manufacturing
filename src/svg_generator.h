@@ -25,8 +25,8 @@ constexpr char* kSvgHeader = "<svg>";
 constexpr char* kSvgFooter = "</svg>";
 constexpr char* kSvgBox =
     "<rect x=\"$0\" y=\"$1\" width=\"$2\" height=\"$3\" "
-    "fill-opacity=\"0.0\" "
-    "style=\"stroke-width:5;stroke:rgb($4,$5,$6);\"/>";
+    "fill-opacity=\"$4\" "
+    "style=\"stroke-width:5;stroke:rgb($5,$6,$7);\"/>";
 constexpr char* kSvgText = "<text x=\"$0\" y=\"$1\" font-size=\"large\" fill=\"$2\">$3</text>";
 
 class SvgGenerator {

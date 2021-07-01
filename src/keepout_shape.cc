@@ -148,7 +148,7 @@ Polygon parse_keepout_polygon(const std::string& file_path) {
       points.emplace_back(x, y);
     }
     polygon_svg =
-        absl::StrCat(polygon_svg, " \" style=\"fill:none;stroke:green;stroke-width:5\" /> ");
+        absl::StrCat(polygon_svg, " \" style=\"fill:none;stroke:red;stroke-width:5\" /> ");
     Polygon keepout_polygon(points);
     keepout_polygon.set_svg_str(polygon_svg);
     return keepout_polygon;
