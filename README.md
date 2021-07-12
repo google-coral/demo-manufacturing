@@ -5,6 +5,10 @@ The Coral Manufacturing Demo demonstrates how to use a Coral Edge TPU to accompl
 * Worker Safety
 * Visual Inspection
 
+Worker Safety | Visual Inspection
+:-------------------------:|:-------------------------:
+![](images/worker_safety.gif) | ![](images/visual_inspection.gif)
+
 With a single Coral Edge TPU, it is possible to run both applications in real time! The demo includes example videos designed for the specific application, but camera sources and other videos are accepted. The demo requires OpenGL and is intended for either x86 platforms or the [Coral Dev Board](https://coral.ai/products/dev-board/) but building for x86, ARM64, and ARMv7 is all supported.
 
 This demo is able to achieve realtime processing and display by taking advantage of the following features:
